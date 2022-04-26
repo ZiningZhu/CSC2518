@@ -1,3 +1,4 @@
+import argparse
 from jiwer import wer
 import librosa  
 import numpy as np 
@@ -183,7 +184,7 @@ def anonymize_cache_speech(section, setting):
             scaling_factor = 0.1
             audio, transcripts, speaker_ids = get_data_per_utterance()
             anonymized_utterances = []
-            for a in audio:
+            for a in tqdm(audio):
                 n = torch.normal(mean=torch.zeros_like(a), std=torch.tensor(scaling_factor) * torch.std(a))
                 anonymized_utterances.append(a+n)
 
@@ -192,7 +193,7 @@ def anonymize_cache_speech(section, setting):
             scaling_factor = 0.1
             audio, transcripts, speaker_ids = get_data_per_utterance()
             anonymize_utterances = []
-            for a in audio:
+            for a in tqdm(audio):
                 gmm = GaussianMixture(n_components=n_components)
                 gmm.fit(a.numpy().reshape(-1, 1))
                 a_ = a 
@@ -216,6 +217,7 @@ def anonymize_cache_speech(section, setting):
                 "anonymized_utterances": anonymized_utterances,
                 "transcripts": transcripts,
                 "speaker_ids": speaker_ids}, f)
+        print("Anonymization done")
     return anonymized_utterances, transcripts, speaker_ids
 
 def run_speaker_identification_evaluation(utterances, speaker_ids):
@@ -252,7 +254,12 @@ def run_asr_evaluation(utterances, transcripts, verbose=True):
 
 if __name__ == "__main__":
     torch.manual_seed(1234)
-    utterances, transcripts, speaker_ids = anonymize_cache_speech("dev-clean", "baseline")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--setting", type=str, default="baseline")
+    args = parser.parse_args()
+    print(args)
+
+    utterances, transcripts, speaker_ids = anonymize_cache_speech("dev-clean", args.setting)
     run_speaker_identification_evaluation(utterances, speaker_ids)
     run_asr_evaluation(utterances, transcripts)
     print("All done!")
