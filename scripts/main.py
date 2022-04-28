@@ -154,7 +154,8 @@ def my_train_test_split(mfccs, speaker_ids):
 ###  Main scripts
 ######################
 
-def anonymize_cache_speech(section, setting):
+def anonymize_cache_speech(section, args):
+    setting = args.setting
     
     cache_path = Path(base_dir, "cache", section, f"{setting}.pkl")
     if cache_path.exists():
@@ -173,7 +174,7 @@ def anonymize_cache_speech(section, setting):
             anonymized_utterances, transcripts, speaker_ids = get_data_per_utterance()  # List (len n_utterance_total) of torch.tensor
 
         elif setting == "uniform_noise_per_utterance":
-            noise_std = 0.01
+            noise_std = args.uniform_noise_std
             audio, transcripts, speaker_ids = get_data_per_utterance()  # List (len n_utterance_total) of torch.tensor
             anonymized_utterances = []
             for a in tqdm(audio):
@@ -181,7 +182,7 @@ def anonymize_cache_speech(section, setting):
                 anonymized_utterances.append(a+n)
 
         elif setting == "adaptive_noise_per_utterance":
-            scaling_factor = 0.1
+            scaling_factor = args.scaling_factor
             audio, transcripts, speaker_ids = get_data_per_utterance()
             anonymized_utterances = []
             for a in tqdm(audio):
@@ -189,19 +190,19 @@ def anonymize_cache_speech(section, setting):
                 anonymized_utterances.append(a+n)
 
         elif setting == "multimodal_noise_per_utterance":
-            n_components = 3
-            scaling_factor = 0.1
+            n_components = args.gmm_n_components
+            scaling_factor = args.scaling_factor
             audio, transcripts, speaker_ids = get_data_per_utterance()
-            anonymize_utterances = []
+            anonymized_utterances = []
             for a in tqdm(audio):
                 gmm = GaussianMixture(n_components=n_components)
                 gmm.fit(a.numpy().reshape(-1, 1))
                 a_ = a 
                 for c in range(n_components):
-                    a_ += torch.normal(
+                    a_ += gmm.weights_[c] * torch.normal(
                         mean=-torch.ones_like(a) * gmm.means_[c, 0], 
                         std=torch.tensor(np.sqrt(gmm.covariances_[c][0,0])))
-                anonymize_utterances.append(a_)
+                anonymized_utterances.append(a_)
         
         elif setting == "normalize_frequency_per_speaker":
             raise NotImplementedError("TODO")
@@ -212,17 +213,18 @@ def anonymize_cache_speech(section, setting):
         
         if not cache_path.parents[0].exists():
             cache_path.parents[0].mkdir(parents=True, exist_ok=True)
-        with open(cache_path, "wb") as f:
-            pickle.dump({
-                "anonymized_utterances": anonymized_utterances,
-                "transcripts": transcripts,
-                "speaker_ids": speaker_ids}, f)
+        #with open(cache_path, "wb") as f:
+        #    pickle.dump({
+        #        "anonymized_utterances": anonymized_utterances,
+        #        "transcripts": transcripts,
+        #        "speaker_ids": speaker_ids}, f)
         print("Anonymization done")
     return anonymized_utterances, transcripts, speaker_ids
 
 def run_speaker_identification_evaluation(utterances, speaker_ids):
     # utterances: list (len N) of torch.tensor of shape (D_i)
     all_X, all_Y = compute_mfcc(utterances, speaker_ids)  # X is(n_speaker, n_mfcc, n_frame)
+    
     train_X, test_X, train_Y, test_Y = my_train_test_split(all_X, all_Y)
     model = MLPClassifier()
     model.fit(train_X, train_Y)
@@ -253,13 +255,17 @@ def run_asr_evaluation(utterances, transcripts, verbose=True):
 
 
 if __name__ == "__main__":
-    torch.manual_seed(1234)
     parser = argparse.ArgumentParser()
     parser.add_argument("--setting", type=str, default="baseline")
+    parser.add_argument("--uniform_noise_std", type=int, default=0.01)
+    parser.add_argument("--scaling_factor", type=float, default=0.1)
+    parser.add_argument("--gmm_n_components", type=int, default=3)
+    parser.add_argument("--seed", type=int, default=1234)
     args = parser.parse_args()
     print(args)
+    torch.manual_seed(args.seed)
 
-    utterances, transcripts, speaker_ids = anonymize_cache_speech("dev-clean", args.setting)
+    utterances, transcripts, speaker_ids = anonymize_cache_speech("dev-clean", args)
     run_speaker_identification_evaluation(utterances, speaker_ids)
     run_asr_evaluation(utterances, transcripts)
     print("All done!")
