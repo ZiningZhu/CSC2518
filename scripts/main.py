@@ -257,7 +257,7 @@ def run_asr_evaluation(utterances, transcripts, verbose=True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--setting", type=str, default="baseline")
-    parser.add_argument("--uniform_noise_std", type=int, default=0.01)
+    parser.add_argument("--uniform_noise_std", type=float, default=0.01)
     parser.add_argument("--scaling_factor", type=float, default=0.1)
     parser.add_argument("--gmm_n_components", type=int, default=3)
     parser.add_argument("--seed", type=int, default=1234)
